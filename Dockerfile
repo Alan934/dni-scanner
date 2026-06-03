@@ -25,11 +25,16 @@ RUN pip install --upgrade pip && \
 COPY app/ ./app/
 COPY tests/ ./tests/
 
+# Pre-descarga de los modelos de PaddleOCR DURANTE EL BUILD.
+# Así quedan dentro de la imagen y no se descargan en runtime: el primer request
+# es rápido y el contenedor no se reinicia a mitad de una descarga en producción.
+RUN python -c "from app.ocr import get_ocr; get_ocr()"
+
 EXPOSE 8000
 
 # El orquestador usa /health para saber si el contenedor está sano y reiniciarlo
-# si deja de responder. start-period da tiempo a que cargue el modelo de OCR.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+# si deja de responder. start-period generoso por si el arranque es lento.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

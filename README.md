@@ -167,12 +167,38 @@ El campo `validations` lista advertencias o motivos. Casos contemplados:
 - **MRZ con dígitos de control no validados** (`mrzValid: false`) → advertencia
   de posible error de lectura OCR.
 
-### `GET /health`
+### `GET /health` y `GET /ready`
 
-Healthcheck **público** (sin autenticación). Devuelve `{"status": "ok"}` si la
-API está viva. Lo consumen orquestadores (Docker/Kubernetes), balanceadores de
-carga y sistemas de monitoreo para detectar caídas y reiniciar el servicio; **no
-se llama a sí mismo**. El `Dockerfile` ya lo usa como `HEALTHCHECK`.
+Endpoints **públicos** (sin autenticación) para orquestadores y monitoreo; **no
+se llaman a sí mismos**.
+
+- **`/health`** (liveness): responde siempre rápido y **no** depende del modelo
+  de OCR. Indica que el proceso está vivo. Es el que usa el `HEALTHCHECK` del
+  `Dockerfile`. Configurá el health check del orquestador contra esta ruta.
+- **`/ready`** (readiness): indica si el modelo de OCR ya está cargado
+  (`modelReady`). Útil para saber cuándo la API puede procesar documentos.
+
+---
+
+## Despliegue en producción
+
+Los modelos de PaddleOCR se **pre-descargan durante el build** (`RUN python -c
+"from app.ocr import get_ocr; get_ocr()"`), quedando dentro de la imagen. Esto
+evita que se descarguen en runtime, que es la causa típica de que el contenedor
+se reinicie en bucle en un PaaS antes de poder atender el primer request.
+
+> ⚠️ El `docker-compose.yml` del repo es **solo para desarrollo** (monta el
+> código, usa `--reload` y un volumen vacío que taparía los modelos de la
+> imagen). **No lo uses en producción.**
+
+### Coolify / PaaS basado en Dockerfile
+
+- Build Pack: **Dockerfile**.
+- Definí las variables de entorno `API_USERNAME` y `API_PASSWORD`.
+- Configurá el health check del servicio contra **`/health`** con un
+  *start period* generoso (≥120 s) para dar tiempo al arranque.
+- **No** montes un volumen en `/root/.paddleocr`: ocultaría los modelos que ya
+  vienen horneados en la imagen y forzaría una descarga en runtime.
 
 ---
 

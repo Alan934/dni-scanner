@@ -14,6 +14,7 @@ import os
 
 os.environ["FLAGS_use_mkldnn"] = "0"
 
+from contextlib import asynccontextmanager
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
@@ -22,21 +23,52 @@ from app import __version__
 from app.front_parser import parse_front_text
 from app.models import ProcessResponse
 from app.mrz_parser import parse_mrz
-from app.ocr import extract_lines_from_image, extract_lines_from_pdf
+from app.ocr import extract_lines_from_image, extract_lines_from_pdf, get_ocr
 from app.security import require_auth
 from app.validators import validate_document
+
+# Indica si el modelo de OCR ya quedó cargado en memoria.
+_model_ready = False
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """
+    Precarga el modelo de OCR al arrancar (los pesos ya vienen en la imagen).
+    Así el primer request no paga la latencia de carga. Si fallara, la app
+    igual arranca: /health sigue respondiendo y el modelo se cargará al usarlo.
+    """
+    global _model_ready
+    try:
+        get_ocr()
+        _model_ready = True
+    except Exception:
+        _model_ready = False
+    yield
+
 
 app = FastAPI(
     title="DNI Scanner API",
     description="Extracción de datos de documentos de identidad mediante OCR + MRZ (ICAO 9303).",
     version=__version__,
+    lifespan=lifespan,
 )
 
 
 @app.get("/health", tags=["meta"])
 def health() -> dict:
-    """Healthcheck simple para orquestadores/monitoreo."""
+    """
+    Liveness: responde siempre rápido y NO depende del modelo de OCR.
+    Lo usa el orquestador para saber que el proceso está vivo. Que devuelva 200
+    no implica que el modelo ya esté listo (para eso está /ready).
+    """
     return {"status": "ok", "version": __version__}
+
+
+@app.get("/ready", tags=["meta"])
+def ready() -> dict:
+    """Readiness: indica si el modelo de OCR ya está cargado y puede procesar."""
+    return {"status": "ready" if _model_ready else "loading", "modelReady": _model_ready}
 
 
 @app.post("/api/v1/ocr/process", response_model=ProcessResponse, tags=["ocr"])
