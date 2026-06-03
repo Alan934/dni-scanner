@@ -16,13 +16,14 @@ os.environ["FLAGS_use_mkldnn"] = "0"
 
 from typing import List, Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 
 from app import __version__
 from app.front_parser import parse_front_text
 from app.models import ProcessResponse
 from app.mrz_parser import parse_mrz
 from app.ocr import extract_lines_from_image, extract_lines_from_pdf
+from app.security import require_auth
 from app.validators import validate_document
 
 app = FastAPI(
@@ -45,6 +46,7 @@ async def process_dni(
     pdfDocument: Optional[UploadFile] = File(None),
     data: Optional[UploadFile] = File(None),
     sessionId: Optional[str] = Form(None),
+    _user: str = Depends(require_auth),
 ) -> ProcessResponse:
     """Procesa un documento de identidad y devuelve los datos extraídos y validados."""
     files = [f for f in (frontImage, backImage, pdfDocument, data) if f is not None]

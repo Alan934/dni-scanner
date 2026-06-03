@@ -27,4 +27,9 @@ COPY tests/ ./tests/
 
 EXPOSE 8000
 
+# El orquestador usa /health para saber si el contenedor está sano y reiniciarlo
+# si deja de responder. start-period da tiempo a que cargue el modelo de OCR.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

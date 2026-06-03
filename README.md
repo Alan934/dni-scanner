@@ -61,6 +61,23 @@ DNI-scanner/
 
 - [Docker](https://www.docker.com/) y Docker Compose.
 
+### Configuración
+
+El endpoint de procesamiento está protegido con **HTTP Basic**. Copiá
+`.env.example` a `.env` y definí las credenciales:
+
+```bash
+cp .env.example .env
+```
+
+```env
+API_USERNAME=admin
+API_PASSWORD=una-clave-segura
+```
+
+> ⚠️ Si `API_PASSWORD` no está definida, la API rechaza todas las peticiones al
+> endpoint protegido (falla cerrada). El archivo `.env` **no** se sube al repo.
+
 ### Levantar el servicio
 
 ```bash
@@ -88,9 +105,10 @@ Solo es necesario reconstruir (`docker compose build`) cuando cambian
 
 ## Uso de la API
 
-### `POST /api/v1/ocr/process`
+### `POST /api/v1/ocr/process` 🔒
 
-Procesa un documento y devuelve los datos extraídos.
+Procesa un documento y devuelve los datos extraídos. **Requiere autenticación
+HTTP Basic** (usuario y contraseña configurados por variables de entorno).
 
 **Parámetros** (multipart/form-data), todos opcionales pero al menos uno requerido:
 
@@ -109,6 +127,7 @@ Procesa un documento y devuelve los datos extraídos.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/ocr/process \
+  -u admin:una-clave-segura \
   -F "backImage=@dorso.jpg" \
   -F "sessionId=mi-sesion-123"
 ```
@@ -147,6 +166,23 @@ El campo `validations` lista advertencias o motivos. Casos contemplados:
 - **Fecha de nacimiento ausente o futura** → advertencia.
 - **MRZ con dígitos de control no validados** (`mrzValid: false`) → advertencia
   de posible error de lectura OCR.
+
+### `GET /health`
+
+Healthcheck **público** (sin autenticación). Devuelve `{"status": "ok"}` si la
+API está viva. Lo consumen orquestadores (Docker/Kubernetes), balanceadores de
+carga y sistemas de monitoreo para detectar caídas y reiniciar el servicio; **no
+se llama a sí mismo**. El `Dockerfile` ya lo usa como `HEALTHCHECK`.
+
+---
+
+## Seguridad
+
+- El endpoint de procesamiento usa **HTTP Basic**; las credenciales viajan
+  codificadas en base64, por lo que **en producción la API debe estar detrás de
+  HTTPS** (reverse proxy con TLS) para que no se puedan interceptar.
+- Las credenciales se comparan con `secrets.compare_digest` (resistente a
+  ataques de temporización) y nunca se hardcodean: se leen de variables de entorno.
 
 ---
 

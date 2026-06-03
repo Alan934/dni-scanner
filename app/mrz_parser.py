@@ -38,21 +38,23 @@ def parse_mrz(text_lines: List[str]) -> Optional[dict]:
     results = []
 
     # TD1: 3 líneas de 30 caracteres (DNI / cédula).
-    td1 = [l for l in candidates if 26 <= len(l) <= 34]
+    # Aceptamos líneas cortas (el OCR a veces pierde los '<' de relleno del final):
+    # _try_checker las rellena hasta 30. El límite superior sí descarta no-TD1.
+    td1 = [l for l in candidates if 15 <= len(l) <= 34]
     for combo in _line_windows(td1, 3):
         res = _try_checker(TD1CodeChecker, combo, expect_len=30, doc_type="ID")
         if res:
             results.append(res)
 
     # TD3: pasaportes, 2 líneas de 44 caracteres.
-    td3 = [l for l in candidates if 40 <= len(l) <= 48]
+    td3 = [l for l in candidates if 38 <= len(l) <= 48]
     for combo in _line_windows(td3, 2):
         res = _try_checker(TD3CodeChecker, combo, expect_len=44, doc_type="PASSPORT")
         if res:
             results.append(res)
 
     # TD2: 2 líneas de 36 caracteres.
-    td2 = [l for l in candidates if 33 <= len(l) <= 39]
+    td2 = [l for l in candidates if 30 <= len(l) <= 39]
     for combo in _line_windows(td2, 2):
         res = _try_checker(TD2CodeChecker, combo, expect_len=36, doc_type="ID")
         if res:
@@ -121,10 +123,13 @@ def _try_checker(checker_cls, lines, expect_len: int, doc_type: str) -> Optional
         return None
 
     # Validación de estructura para descartar ventanas de ruido del frente:
-    # apellido + número de documento presentes y dos fechas MRZ reales.
+    #  - apellido y número de documento presentes,
+    #  - fecha de NACIMIENTO válida (es la más confiable y la firma más fuerte).
+    # La fecha de vencimiento puede venir mal leída por OCR: si es inválida,
+    # se descarta el dato pero no el resultado completo.
     if not fields.surname.strip("<") or not fields.document_number.strip("<"):
         return None
-    if not _valid_mrz_date(fields.birth_date) or not _valid_mrz_date(fields.expiry_date):
+    if not _valid_mrz_date(fields.birth_date):
         return None
 
     result = _build_result(fields, doc_type)
@@ -173,7 +178,7 @@ def _iso_date(yymmdd: str, kind: str = "birth") -> Optional[str]:
       kind="birth"  -> la fecha está en el pasado (nacimiento).
       kind="expiry" -> la fecha suele ser futura (vencimiento).
     """
-    if not yymmdd or len(yymmdd) != 6 or not yymmdd.isdigit():
+    if not _valid_mrz_date(yymmdd):
         return None
     yy, mm, dd = yymmdd[0:2], yymmdd[2:4], yymmdd[4:6]
     current_yy = datetime.now().year % 100

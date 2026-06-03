@@ -3,6 +3,12 @@ services:
     build: .
     ports:
       - "8000:8000"
+    environment:
+      # Credenciales HTTP Basic del endpoint protegido.
+      # Definilas en un archivo .env (ver .env.example). Los valores de abajo
+      # son solo defaults de desarrollo.
+      - API_USERNAME=${API_USERNAME:-admin}
+      - API_PASSWORD=${API_PASSWORD:-changeme}
     volumes:
       - ./app:/code/app          # hot-reload del código de la app
       - ./tests:/code/tests      # tests disponibles en el contenedor
