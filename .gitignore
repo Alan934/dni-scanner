@@ -33,3 +33,4 @@ Thumbs.db
 # Archivos locales sensibles
 *.env
 .env
+.claude
