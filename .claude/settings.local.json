@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\Docker\\\\Docker\\\\resources\\\\bin;\" + $env:Path; docker compose run --rm api pytest 2>&1 | Select-Object -Last 40)"
+    ]
+  }
+}

@@ -1,9 +1,18 @@
+# --- API ---
 fastapi>=0.110.0
 uvicorn>=0.28.0
 python-multipart>=0.0.9
+
+# --- OCR ---
+# numpy<2.0 es requerido: paddleocr/opencv están compilados contra numpy 1.x.
 numpy<2.0
 paddlepaddle==2.6.2
 paddleocr==2.7.3
 opencv-python-headless>=4.9.0
+
+# --- Parseo de documentos ---
 pypdf>=4.1.0
 mrz>=0.6.0
+
+# --- Tests ---
+pytest>=8.0.0

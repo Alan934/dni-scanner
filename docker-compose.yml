@@ -4,9 +4,10 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./main.py:/app/main.py        # hot-reload del código
-      - paddle_models:/root/.paddleocr # modelos cacheados entre reinicios
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      - ./app:/code/app          # hot-reload del código de la app
+      - ./tests:/code/tests      # tests disponibles en el contenedor
+      - paddle_models:/root/.paddleocr  # modelos cacheados entre reinicios
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
   paddle_models:
