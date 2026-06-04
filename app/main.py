@@ -23,7 +23,12 @@ from app import __version__
 from app.front_parser import parse_front_text
 from app.models import ProcessResponse
 from app.mrz_parser import parse_mrz
-from app.ocr import extract_lines_from_image, extract_lines_from_pdf, get_ocr
+from app.ocr import (
+    extract_lines_fast,
+    extract_lines_from_pdf,
+    extract_lines_preprocessed,
+    get_ocr,
+)
 from app.security import require_auth
 from app.validators import validate_document
 
@@ -81,14 +86,10 @@ async def process_dni(
     _user: str = Depends(require_auth),
 ) -> ProcessResponse:
     """Procesa un documento de identidad y devuelve los datos extraídos y validados."""
-    files = [f for f in (frontImage, backImage, pdfDocument, data) if f is not None]
-    if not files:
+    if not any((frontImage, backImage, pdfDocument, data)):
         raise HTTPException(status_code=400, detail="No se proporcionaron archivos legibles")
 
-    all_lines = await _extract_all_lines(files)
-
-    # MRZ primero (más preciso y multinacional); si falla, fallback al frente.
-    parsed = parse_mrz(all_lines) or parse_front_text(all_lines)
+    parsed = await _extract_document_data(frontImage, backImage, pdfDocument, data)
     if not parsed:
         raise HTTPException(status_code=422, detail="No se lograron extraer datos válidos del documento")
 
@@ -103,13 +104,50 @@ async def process_dni(
     )
 
 
-async def _extract_all_lines(files: List[UploadFile]) -> List[str]:
-    """Lee todos los archivos y devuelve las líneas de texto combinadas."""
-    all_lines: List[str] = []
-    for file in files:
-        content = await file.read()
-        if (file.filename or "").lower().endswith(".pdf"):
-            all_lines.extend(extract_lines_from_pdf(content))
-        else:
-            all_lines.extend(extract_lines_from_image(content))
-    return all_lines
+async def _extract_document_data(
+    front: Optional[UploadFile],
+    back: Optional[UploadFile],
+    pdf: Optional[UploadFile],
+    extra: Optional[UploadFile],
+) -> Optional[dict]:
+    """
+    Estrategia escalonada "rápido primero": hace solo el OCR necesario y se detiene
+    apenas obtiene un MRZ válido. Así el caso normal (DNI legible) responde rápido,
+    sin perder robustez ante fotos degradadas.
+
+    Orden de intentos:
+      1. PDF: texto embebido (instantáneo).
+      2. OCR rápido del dorso (donde está el MRZ).
+      3. OCR rápido del resto de imágenes.
+      4. Rescate: OCR preprocesado de todas las imágenes.
+      5. Fallback heurístico al texto del frente.
+    """
+    # Imágenes en orden de prioridad: el dorso suele tener el MRZ.
+    image_files = [f for f in (back, front, extra) if f is not None]
+    image_bytes = [await f.read() for f in image_files]
+
+    accumulated: List[str] = []
+
+    # 1. PDF (texto embebido): rápido y suele traer el MRZ.
+    if pdf is not None:
+        accumulated += extract_lines_from_pdf(await pdf.read())
+        found = parse_mrz(accumulated)
+        if found:
+            return found
+
+    # 2 y 3. OCR rápido, imagen por imagen, deteniéndonos apenas el MRZ valide.
+    for img in image_bytes:
+        accumulated += extract_lines_fast(img)
+        found = parse_mrz(accumulated)
+        if found:
+            return found
+
+    # 4. Rescate: OCR preprocesado (más lento) solo si lo rápido no alcanzó.
+    for img in image_bytes:
+        accumulated += extract_lines_preprocessed(img)
+        found = parse_mrz(accumulated)
+        if found:
+            return found
+
+    # 5. Último recurso: heurística sobre el texto del frente.
+    return parse_front_text(accumulated)

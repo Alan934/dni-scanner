@@ -223,6 +223,24 @@ validaciones de negocio.
 
 ---
 
+## Rendimiento
+
+El OCR en CPU es la parte costosa. Para minimizar la latencia, el procesamiento
+es **escalonado** ("rápido primero"): hace solo el OCR necesario y se detiene
+apenas obtiene un MRZ válido.
+
+1. PDF (texto embebido) — instantáneo.
+2. OCR rápido del **dorso** (donde está el MRZ).
+3. OCR rápido del resto de imágenes.
+4. *Rescate*: OCR con preprocesamiento (más lento) solo si lo anterior falló.
+5. *Fallback*: heurística sobre el texto del frente.
+
+Así, un documento legible se resuelve en la **etapa 2** (una sola pasada de OCR),
+en vez de procesar todas las imágenes dos veces. Las fotos degradadas conservan
+toda la robustez porque recorren las etapas de rescate.
+
+---
+
 ## Notas y limitaciones
 
 - El **número de identificación nacional** que se puede extraer depende del país:

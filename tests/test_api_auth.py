@@ -20,8 +20,8 @@ def client(monkeypatch):
     # Credenciales conocidas para el test (require_auth lee estos globals).
     monkeypatch.setattr("app.security._USERNAME", USER)
     monkeypatch.setattr("app.security._PASSWORD", PASSWORD)
-    # Evitamos ejecutar OCR real: cualquier imagen devuelve las líneas del DNI AR.
-    monkeypatch.setattr(main, "extract_lines_from_image", lambda _: ARG_LINES)
+    # Evitamos ejecutar OCR real: la pasada rápida devuelve las líneas del DNI AR.
+    monkeypatch.setattr(main, "extract_lines_fast", lambda _: ARG_LINES)
     return TestClient(main.app)
 
 

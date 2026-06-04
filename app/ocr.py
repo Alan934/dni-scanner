@@ -59,23 +59,43 @@ def _ocr_lines(img: np.ndarray) -> List[str]:
     return lines
 
 
-def extract_lines_from_image(image_bytes: bytes) -> List[str]:
-    """
-    Ejecuta OCR sobre la imagen original y sobre una versión preprocesada,
-    combinando las líneas. Así, si una de las dos lee mejor el MRZ, el parser
-    igual lo encuentra (el parser elige el mejor resultado entre todas).
-    """
+def _decode(image_bytes: bytes) -> "np.ndarray | None":
+    """Decodifica bytes a imagen BGR, o None si no es una imagen válida."""
     nparr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+
+def extract_lines_fast(image_bytes: bytes) -> List[str]:
+    """
+    OCR rápido: una sola pasada sobre la imagen original (sin preprocesar).
+    Es la vía normal; basta para fotos legibles.
+    """
+    img = _decode(image_bytes)
     if img is None:
         return []
+    return _ocr_lines(img)
 
-    lines = _ocr_lines(img)
+
+def extract_lines_preprocessed(image_bytes: bytes) -> List[str]:
+    """
+    OCR sobre la versión preprocesada (escalado + umbralizado). Más lento; se usa
+    solo como rescate cuando la pasada rápida no logró extraer un MRZ válido.
+    """
+    img = _decode(image_bytes)
+    if img is None:
+        return []
     try:
-        lines += _ocr_lines(_preprocess(img))
+        return _ocr_lines(_preprocess(img))
     except cv2.error:
-        pass  # si el preprocesamiento falla, nos quedamos con el OCR original
-    return lines
+        return []
+
+
+def extract_lines_from_image(image_bytes: bytes) -> List[str]:
+    """
+    OCR completo (rápida + preprocesada combinadas). Se conserva por compatibilidad
+    y para usos donde se prefiere máxima cobertura en una sola llamada.
+    """
+    return extract_lines_fast(image_bytes) + extract_lines_preprocessed(image_bytes)
 
 
 def extract_lines_from_pdf(pdf_bytes: bytes) -> List[str]:
